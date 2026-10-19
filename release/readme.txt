@@ -1,16 +1,12 @@
 
   To install the mod:
-  - open Steam > Library > Dota2 > right-click Properties > Installed files > Browse..
-  - copy release/game/ subfolder over there, overwriting existing files:
-  game/dota_mods/pak01_dir.vpk
-  game/dota/gameinfo_branchspecific.gi
-  - or skip gameinfo_branchspecific.gi and use instead launch option: -language mods
+  - set the audio language to anything but English (Settings > Audio), so game/dota_<language> exists
+  - copy pak02_dir.vpk into game/dota_<language>/ of Dota 2 (Steam > Library > Dota 2 > Properties > Installed files > Browse..)
+  - or run: python3 tools/build.py --install
 
   To remake the mod from source:
-  - need Dota2 Workshop Tools DLC for resourcecompile xml source files
-  - run dota_mod_builder.bat, auto-compiled vpkmod will create the release vpk archive
-  - this version will use a background.png if present in dota/panorama/images
+  - python3 tools/build.py (no Workshop Tools needed)
 
-  To explore release/game/dota_mods/pak01_dir.vpk and compiled *_c content:
+  To explore pak02_dir.vpk and compiled *_c content:
   - use VRF tool by SteamDatabase: github.com/SteamDatabase/ValveResourceFormat/
 

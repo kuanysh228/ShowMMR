@@ -1,59 +1,109 @@
 <p align="center">
-  <img src="preview.png" alt="ShowMMR DOTA dashboard mod"/>
-
-```
-  ShowMMR, a DOTA dashboard mod to bring back the mmr numbers now that rank changes are variable
-  ------------------------------------------------------------------------------------------------------
-  Numbers are displayed like in the old client - the Nov 19 2017 one still works - example: 12345 (+45)
-  New numbers are saved locally per-user, serialized to JOY1 - JOY32 binds for up to 640 recent matches
-  Your defined binds - that reside in slot0 - will not be affected
-  Optionally retrieve previous history via ShowMMR tool, and replace local file with the generated one
-  Toggle Settings - Video - High Quality Dashboard OFF to enable Last Match page with background.png 
-                                        _______________________
-                        SetTableValue  |                      3|    GetTableValue
-                        _______________| scripts /             |____________________
-                       |  __>___>___>__  custom_net_tables.txt  ___>___>___>___>__  |
-                       |^|             |_______________________|                  |v|
-                 ______| |_____                                     ______________| |_________________
-                |             2|         SendCustomGameEvent       |                                 4|
-                | scripts /    |___________________________________| panorama /                       |
-  SendToConsole | vscripts /    ___<___<___<___<___<___<___<___<___  layout /                         |
-   _____________| core /       |                                   | base.xml           DashboardCore |
-  |  _<___<___<_  coreinit.lua |          DOTARankUpdated          |______________   _________________|
-  | |           |______   _____| DOTAShowLocalProfileHeroStatsPage                | |                 
-  | |                  | |               #ranked_mmr_value                        |v| core.Data.history
-  |v|    LoadKeyValues |^|                                     ___________________| |_________________ 
-  | |      ____________| |___________     ________________    |                                      5|
-  | |     |                         1|   |               6|   | panorama /                            |
-  | |_____|  cfg /                   |   | panorama /     |   | layout /                              |
-  |____>__   user_keys_%d_slot3.vcfg |   | images /       |___| dashboard_page_profile_hero_stats.xml |
-          |__________________________|   | background.png  ___  dashboard_background_last_match.*     |
-                                         |________________|   |_______________________________________|
-
-  If any game is running, only cached Data history is used when opening the hero stats page
-  Back at dashboard, event signals script to retrieve #ranked_mmr_value and update table if needed
-  It may look like a lot of work to just get a number from ui and save it in a table locally
-  That is because vscript and panorama are finally hardened / crippled, no more ~arbitrary r/w!
-
-  These scripts do not touch any gameplay elements, should be whitelist-able at a glance
-  Knowing Valve have historically disabled specific modding features rather than carpet banning users
-  Nothing bad should happen if there is any official griefing regarding this harmless dashboard mod
-  Still, use at your own risk!
-```
-```
-  To install the mod:
-  - open Steam > Library > Dota2 > right-click Properties > Installed files > Browse..
-  - copy release/game/ subfolder over there, overwriting existing files:
-  game/dota_mods/pak01_dir.vpk
-  game/dota/gameinfo_branchspecific.gi
-  - or skip gameinfo_branchspecific.gi and use instead launch option: -language mods
-
-  To remake the mod from source:
-  - need Dota2 Workshop Tools DLC for resourcecompile xml source files
-  - run dota_mod_builder.bat, auto-compiled vpkmod will create the release vpk archive
-
-  To explore release/game/dota_mods/pak01_dir.vpk and compiled *_c content:
-  - use VRF tool by SteamDatabase: github.com/SteamDatabase/ValveResourceFormat/
-
-```
+  <img src="preview.png" alt="ShowMMR dashboard mod"/>
 </p>
+
+# ShowMMR (2026 rework)
+
+A Dota 2 dashboard mod that brings back the MMR numbers in match history now that rank changes are variable.
+Ranked rows on the profile stats page show `12345 (+45)` instead of Win / Loss, and the last match
+background shows the change.
+
+*[Русская версия](README.ru.md)*
+
+Fork of [AveYo/ShowMMR](https://github.com/AveYo/ShowMMR) (MIT). The original mod stopped working after Valve
+hardened panorama / vscript, this fork rebuilds it for the current client:
+
+| | upstream | this fork |
+|---|---|---|
+| Valve layouts | replaced with modified copies, break on every Dota update | not replaced, rows are patched from `showmmr.js` |
+| History storage | `JOY1-32` binds of slot 3 | archived convars, survive Dota restarts |
+| Build | Workshop Tools DLC, Windows `.bat` | `python3 tools/build.py`, standard library only |
+| Install | `pak01_dir.vpk` + `gameinfo_branchspecific.gi` | one `pak02_dir.vpk` in the `dota_<language>` folder |
+
+## How it works
+
+```
+ panorama/scripts/showmmr.js                 scripts/vscripts/core/coreinit.lua
+ (dashboard UI)                              (local vscript server)
+
+ opens the hidden hero stats page
+ reads #ranked_mmr_value and the start
+ time of the latest ranked match
+        |  SendCustomGameEventToServer
+        |  ShowMMR_Refresh {mmr, time}
+        v
+                                             change = mmr - mmr of the previous known match
+                                             data[time] = {mmr, change}
+                                             Convars: showmmr_<account>_1..64  (FCVAR_ARCHIVE)
+                                             host_writeconfig -> machine_convars.vcfg
+        ^
+        |  CustomNetTables ShowMMR_history / ShowMMR_update
+        |
+ patches the Win / Loss text of ranked rows:  12345 (+45)
+```
+
+- The start time of a match is the key. Panorama can only localize a time, not read it back, so
+  `MatchTime()` derives candidate UTC timestamps from the displayed date and picks the one that localizes the same.
+- History is saved as `time:[mmr,change]` entries, 8 per convar, 64 convars per account, so up to 512 recent matches.
+- Every Dota start the vscript VM registers the convars again and reads the saved values back.
+- History is refreshed when the dashboard is shown after a game, on `DOTARankUpdated`, and once 20 seconds after startup.
+- Nothing touches gameplay, the scripts only run on the dashboard (`if GameRules then return end`).
+
+The first match after a fresh install has no previous value to compare against and shows `(0)`.
+The next one is calculated from it.
+
+## Install
+
+Dota 2 only mounts mods from a language folder, so the audio language must not be English
+(Settings > Audio, e.g. Russian). The folder must exist: `game/dota_<language>`.
+
+```
+git clone https://github.com/kuanysh228/ShowMMR
+cd ShowMMR
+python3 tools/build.py --install
+```
+
+The tool finds Dota through Steam's `libraryfolders.vdf`. If it cannot, or you want another language:
+
+```
+python3 tools/build.py --install --game "/path/to/dota 2 beta/game" --language russian
+```
+
+Or copy `release/pak02_dir.vpk` into `game/dota_<language>/` by hand. Restart Dota.
+
+Remove with `python3 tools/build.py --uninstall`.
+
+## Build
+
+`tools/build.py` compiles `source/dota` without Workshop Tools: it writes the KV3 binary for layouts, the
+`.vjs_c` resource for scripts, and packs everything into a version 2 VPK.
+
+```
+python3 tools/build.py            # release/pak02_dir.vpk
+```
+
+## Repository layout
+
+```
+source/dota/
+  panorama/layout/base.xml          includes Valve's base styles and showmmr.js
+  panorama/scripts/showmmr.js       UI side: reads the number, patches rows
+  scripts/custom_net_tables.txt     ShowMMR_history, ShowMMR_update
+  scripts/vscripts/core/coreinit.lua  data side: computes changes, persists them
+tools/build.py                      VPK builder and installer
+release/pak02_dir.vpk               prebuilt mod
+ShowMMR_tool/                       upstream C# tool that downloads old history from Steam (unchanged)
+```
+
+## Import old history
+
+`ShowMMR_tool` (from upstream, needs .NET) fetches previous matches from the game coordinator and writes
+`game/dota/cfg/showmmr_<account>.vcfg`. The mod imports it on startup and only fills in matches that are not saved yet.
+
+## Disclaimer
+
+The scripts do not touch gameplay and are easy to review, but Valve can change the dashboard at any time. Use at your own risk.
+
+## Credits
+
+Original mod by [AveYo](https://github.com/AveYo/ShowMMR). MIT license.
